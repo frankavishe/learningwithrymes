@@ -1,0 +1,30 @@
+version: '3.8'
+services:
+  mysql_db:
+    image: mysql:8.0
+    container_name: rhythm_notes_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_db_password
+      MYSQL_DATABASE: rhythm_notes
+      MYSQL_USER: rhythm_app_user
+      MYSQL_PASSWORD: app_secure_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: rhythm_notes_pma
+    restart: always
+    links:
+      - mysql_db:db
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mysql_db
+      MYSQL_ROOT_PASSWORD: root_db_password
+
+volumes:
+  mysql_data:
