@@ -5,6 +5,7 @@ import { Song } from './entities/song.entity';
 import { SongPrompt } from './entities/song-prompt.entity';
 import { GenerateSongDto } from './dto/generate-song.dto';
 import { SongGenerationQueueService } from '../ai/song-generation-queue.service';
+import { StorageService } from '../storage/storage.service';
 
 export interface GenerateSongResult {
   promptId: string;
@@ -18,6 +19,7 @@ export class SongsService {
     @InjectRepository(SongPrompt)
     private readonly songPrompts: Repository<SongPrompt>,
     private readonly queueService: SongGenerationQueueService,
+    private readonly storage: StorageService,
   ) {}
 
   // API-001 — scoped to the authenticated user; `subject` filters on the owning prompt's
@@ -49,11 +51,16 @@ export class SongsService {
     return song;
   }
 
-  // API-003 — removes the DB row. STORAGE-003 (Phase 6) will purge the audio objects from
-  // object storage before/alongside this delete; no storage client exists yet, so only the row
-  // goes for now.
+  // API-003/STORAGE-003 — purges the song's stored objects before removing the DB row, so a
+  // failed purge doesn't leave a dangling DB reference (retrying the delete is safe: a repeat
+  // purge on an already-missing key is a no-op under the S3 API).
   async remove(id: string, userId: string): Promise<void> {
     const song = await this.findOneForUser(id, userId);
+    await this.storage.deleteByUrls([
+      song.audioFileUrl,
+      song.vocalStemUrl,
+      song.beatStemUrl,
+    ]);
     await this.songs.delete({ id: song.id });
   }
 

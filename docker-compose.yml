@@ -35,6 +35,25 @@ services:
     volumes:
       - redis_data:/data
 
+  # Phase 6 (STORAGE-001) — self-hosted, dev-friendly S3-compatible object storage for generated
+  # audio, matching the docker-compose pattern already used for mysql_db/redis. The app's
+  # StorageService talks to it over the S3 API, so swapping to AWS S3 in prod is an env-var change
+  # only (specs/06-audio-storage.md Open Questions).
+  minio:
+    image: minio/minio
+    container_name: rhythm_notes_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: rhythm_minio_admin
+      MINIO_ROOT_PASSWORD: rhythm_minio_password
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web console
+    volumes:
+      - minio_data:/data
+
 volumes:
   mysql_data:
   redis_data:
+  minio_data:
