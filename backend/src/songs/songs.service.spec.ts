@@ -6,6 +6,7 @@ import { SongsService } from './songs.service';
 import { Song } from './entities/song.entity';
 import { SongPrompt } from './entities/song-prompt.entity';
 import { SongGenerationQueueService } from '../ai/song-generation-queue.service';
+import { StorageService } from '../storage/storage.service';
 
 type MockRepo<T extends object> = Partial<
   Record<keyof Repository<T>, jest.Mock>
@@ -31,6 +32,7 @@ describe('SongsService', () => {
   let songs: MockRepo<Song>;
   let songPrompts: MockRepo<SongPrompt>;
   let queueService: { enqueue: jest.Mock };
+  let storage: { deleteByUrls: jest.Mock };
   let queryBuilder: {
     leftJoinAndSelect: jest.Mock;
     where: jest.Mock;
@@ -62,6 +64,7 @@ describe('SongsService', () => {
       }),
     };
     queueService = { enqueue: jest.fn().mockResolvedValue('job-1') };
+    storage = { deleteByUrls: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -69,6 +72,7 @@ describe('SongsService', () => {
         { provide: getRepositoryToken(Song), useValue: songs },
         { provide: getRepositoryToken(SongPrompt), useValue: songPrompts },
         { provide: SongGenerationQueueService, useValue: queueService },
+        { provide: StorageService, useValue: storage },
       ],
     }).compile();
 
@@ -126,11 +130,20 @@ describe('SongsService', () => {
   });
 
   describe('remove', () => {
-    it('deletes the row after confirming ownership (API-003)', async () => {
-      songs.findOne!.mockResolvedValue(makeSong());
+    it('purges storage then deletes the row after confirming ownership (API-003, STORAGE-003)', async () => {
+      const song = makeSong({
+        vocalStemUrl: 'https://example.com/vocals.mp3',
+        beatStemUrl: 'https://example.com/beat.mp3',
+      });
+      songs.findOne!.mockResolvedValue(song);
 
       await service.remove('song-1', 'user-1');
 
+      expect(storage.deleteByUrls).toHaveBeenCalledWith([
+        song.audioFileUrl,
+        song.vocalStemUrl,
+        song.beatStemUrl,
+      ]);
       expect(songs.delete).toHaveBeenCalledWith({ id: 'song-1' });
     });
 
@@ -140,6 +153,7 @@ describe('SongsService', () => {
       await expect(
         service.remove('song-1', 'someone-else'),
       ).rejects.toBeInstanceOf(NotFoundException);
+      expect(storage.deleteByUrls).not.toHaveBeenCalled();
       expect(songs.delete).not.toHaveBeenCalled();
     });
   });

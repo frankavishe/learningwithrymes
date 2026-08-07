@@ -7,6 +7,7 @@ import { AudioGenerationService } from './services/audio-generation.service';
 import { SongGenerationQueueService } from './song-generation-queue.service';
 import { SongGenerationProcessor } from './song-generation.processor';
 import { Song } from '../songs/entities/song.entity';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
@@ -14,6 +15,9 @@ import { Song } from '../songs/entities/song.entity';
     // Declared directly (rather than importing SongsModule) to avoid a circular import once
     // Phase 5's SongsModule imports AiModule to call SongGenerationQueueService.
     TypeOrmModule.forFeature([Song]),
+    // Phase 6 — AudioGenerationService uploads Replicate's output into our own bucket
+    // (STORAGE-001/STORAGE-002) before persisting a URL.
+    StorageModule,
   ],
   providers: [
     LyricStructuringService,

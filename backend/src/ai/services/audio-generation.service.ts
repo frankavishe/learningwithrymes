@@ -11,6 +11,7 @@ import {
   GenerateSongJobData,
   StructuredLyrics,
 } from '../types/pipeline.types';
+import { StorageService } from '../../storage/storage.service';
 
 // Stage 2 of the pipeline (specs/04-ai-generation-pipeline.md) — turns Stage 1's structured lyrics
 // into an audio track via Replicate-hosted MusicGen. Satisfies AI-004.
@@ -24,7 +25,10 @@ export class AudioGenerationService {
   private readonly client: Replicate;
   private readonly model: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly storage: StorageService,
+  ) {
     this.client = new Replicate({
       auth: this.config.get<string>('REPLICATE_API_TOKEN'),
     });
@@ -49,8 +53,13 @@ export class AudioGenerationService {
       },
     });
 
+    // STORAGE-001/STORAGE-002 — Replicate's URL is a third-party, time-limited delivery link, not
+    // durable storage. Re-upload it into our own bucket and persist that URL instead.
+    const providerUrl = this.extractAudioUrl(output);
+    const audioFileUrl = await this.storage.uploadFromUrl(providerUrl);
+
     return {
-      audioFileUrl: this.extractAudioUrl(output),
+      audioFileUrl,
       durationSeconds: DEFAULT_AUDIO_DURATION_SECONDS,
     };
   }
