@@ -26,5 +26,15 @@ services:
       PMA_HOST: mysql_db
       MYSQL_ROOT_PASSWORD: root_db_password
 
+  redis:
+    image: redis:7-alpine
+    container_name: rhythm_notes_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
 volumes:
   mysql_data:
+  redis_data:
