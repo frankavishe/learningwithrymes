@@ -1,3 +1,6 @@
 # Documentation & spec-driven-dev planning artifacts (not app code)
 *.md
 RhythmNotes_Technical_Specification.pdf
+
+# IDE workspace state (JetBrains/Android Studio) — local machine paths, caches, recent-file lists
+.idea/
