@@ -38,6 +38,7 @@ dependencies:
   just_audio: ^0.10.6
   path_provider: ^2.1.6
   flutter_secure_storage: ^11.0.0
+  http: ^1.5.0
 
 dev_dependencies:
   flutter_test:
