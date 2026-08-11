@@ -6,10 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rhythmnotes_app/app.dart';
 
-/// End-to-end smoke test for the Phase 7 app shell: boots [RhythmNotesApp]
-/// under a real [ProviderScope] (`MOBILE-002`) and runs the in-app
-/// diagnostics button, which exercises flutter_secure_storage,
-/// path_provider, and just_audio (`MOBILE-003`..`MOBILE-005`) together.
+/// End-to-end smoke tests for the app shell's auth-gated root (`app.dart`,
+/// `UI-AUTH-001`/`UI-AUTH-002`): signed-out users land on [AuthScreen],
+/// signed-in users (JWT already in secure storage) land on
+/// [AuthenticatedShell], and its diagnostics button still exercises
+/// path_provider and just_audio (`MOBILE-003`/`MOBILE-004`) end to end.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -55,15 +56,42 @@ void main() {
     }
   });
 
-  testWidgets('app shell boots signed-out under ProviderScope', (tester) async {
+  testWidgets('shows the sign-in form when signed out', (tester) async {
     await tester.pumpWidget(const ProviderScope(child: RhythmNotesApp()));
     await tester.pumpAndSettle();
 
-    expect(find.text('App shell ready — Screens 1-4 land in Phases 8-11.'), findsOneWidget);
-    expect(find.text('Signed out (no stored JWT)'), findsOneWidget);
+    expect(find.widgetWithText(AppBar, 'Sign in'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Email'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Password'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Log in'), findsOneWidget);
   });
 
-  testWidgets('dependency smoke test button reports all three plugins OK', (tester) async {
+  testWidgets('shows the authenticated shell when a JWT is already stored', (tester) async {
+    store['jwt_token'] = 'seeded-token';
+
+    await tester.pumpWidget(const ProviderScope(child: RhythmNotesApp()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Signed in — Screens 2-4 land in Phases 9-11.'), findsOneWidget);
+  });
+
+  testWidgets('signing out returns to the sign-in form', (tester) async {
+    store['jwt_token'] = 'seeded-token';
+
+    await tester.pumpWidget(const ProviderScope(child: RhythmNotesApp()));
+    await tester.pumpAndSettle();
+    expect(find.text('Signed in — Screens 2-4 land in Phases 9-11.'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Sign out'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(AppBar, 'Sign in'), findsOneWidget);
+    expect(store.containsKey('jwt_token'), isFalse);
+  });
+
+  testWidgets('dependency smoke test button reports path_provider and just_audio OK', (tester) async {
+    store['jwt_token'] = 'seeded-token';
+
     await tester.pumpWidget(const ProviderScope(child: RhythmNotesApp()));
     await tester.pumpAndSettle();
 
@@ -78,10 +106,9 @@ void main() {
     });
     await tester.pump(); // rebuild with results and show the SnackBar
 
-    final snackBarTextFinder = find.textContaining('secure_storage:');
+    final snackBarTextFinder = find.textContaining('path_provider:');
     expect(snackBarTextFinder, findsOneWidget);
     final snackBarText = tester.widget<Text>(snackBarTextFinder);
-    expect(snackBarText.data, contains('secure_storage: OK'));
     expect(snackBarText.data, contains('path_provider: OK'));
     expect(snackBarText.data, contains('just_audio: OK'));
   });

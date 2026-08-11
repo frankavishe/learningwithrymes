@@ -1,0 +1,134 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:rhythmnotes_app/core/network/api_client.dart';
+
+/// Unit tests for [ApiClient] against `backend/src/auth`'s actual response
+/// shapes (`AUTH-001`/`AUTH-002`), using `http`'s [MockClient] instead of a
+/// live server.
+void main() {
+  group('register', () {
+    test('parses a successful response into an AuthResult', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async {
+          expect(request.url.toString(), 'http://test.local/api/auth/register');
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          expect(body, {'name': 'Ada', 'email': 'ada@example.com', 'password': 'password123'});
+
+          return http.Response(
+            jsonEncode({
+              'accessToken': 'jwt.token.here',
+              'user': {
+                'id': 'user-1',
+                'name': 'Ada',
+                'email': 'ada@example.com',
+                'createdAt': '2026-08-11T00:00:00.000Z',
+              },
+            }),
+            201,
+          );
+        }),
+      );
+
+      final result = await client.register(name: 'Ada', email: 'ada@example.com', password: 'password123');
+
+      expect(result.accessToken, 'jwt.token.here');
+      expect(result.user.id, 'user-1');
+      expect(result.user.name, 'Ada');
+      expect(result.user.email, 'ada@example.com');
+    });
+
+    test('throws ApiException with the server message on a duplicate email (409)', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async {
+          return http.Response(
+            jsonEncode({'statusCode': 409, 'message': 'Email is already registered', 'error': 'Conflict'}),
+            409,
+          );
+        }),
+      );
+
+      await expectLater(
+        client.register(name: 'Ada', email: 'ada@example.com', password: 'password123'),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 409)
+              .having((e) => e.message, 'message', 'Email is already registered'),
+        ),
+      );
+    });
+
+    test('joins a ValidationPipe array message into one string (400)', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'statusCode': 400,
+              'message': ['email must be an email', 'password must be longer than 8 characters'],
+              'error': 'Bad Request',
+            }),
+            400,
+          );
+        }),
+      );
+
+      await expectLater(
+        client.register(name: 'Ada', email: 'not-an-email', password: 'short'),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.message,
+            'message',
+            'email must be an email, password must be longer than 8 characters',
+          ),
+        ),
+      );
+    });
+  });
+
+  group('login', () {
+    test('throws ApiException on invalid credentials (401)', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async {
+          expect(request.url.toString(), 'http://test.local/api/auth/login');
+          return http.Response(
+            jsonEncode({'statusCode': 401, 'message': 'Invalid email or password', 'error': 'Unauthorized'}),
+            401,
+          );
+        }),
+      );
+
+      await expectLater(
+        client.login(email: 'ada@example.com', password: 'wrong-password'),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 401)
+              .having((e) => e.message, 'message', 'Invalid email or password'),
+        ),
+      );
+    });
+
+    test('wraps a transport failure as an ApiException instead of throwing raw', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async => throw const SocketExceptionStub()),
+      );
+
+      await expectLater(
+        client.login(email: 'ada@example.com', password: 'password123'),
+        throwsA(isA<ApiException>()),
+      );
+    });
+  });
+}
+
+/// Stand-in for `dart:io`'s `SocketException` — avoids importing `dart:io`
+/// just for this one throw in a client-agnostic test.
+class SocketExceptionStub implements Exception {
+  const SocketExceptionStub();
+}
