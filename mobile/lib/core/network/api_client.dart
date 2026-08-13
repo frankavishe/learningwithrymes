@@ -40,6 +40,21 @@ class AuthResult {
       );
 }
 
+/// Mirrors `GenerateSongResult` from `backend/src/songs/songs.service.ts` —
+/// the `202` response body of `POST /api/songs/generate`. Confirms the job
+/// was enqueued (`AI-005`); it says nothing about the song being ready yet.
+class GenerateSongResult {
+  const GenerateSongResult({required this.promptId, required this.jobId});
+
+  final String promptId;
+  final String jobId;
+
+  factory GenerateSongResult.fromJson(Map<String, dynamic> json) => GenerateSongResult(
+        promptId: json['promptId'] as String,
+        jobId: json['jobId'] as String,
+      );
+}
+
 /// Thrown by [ApiClient] on a non-2xx response or an unreachable server.
 /// [message] is meant to be shown to the user directly — [AuthScreen] relies
 /// on this to satisfy `UI-AUTH-001`'s "invalid credentials show an inline
@@ -84,12 +99,43 @@ class ApiClient {
     return _postAuth('/auth/login', {'email': email, 'password': password});
   }
 
+  /// `API-006` — requires a signed-in [token] (JWT, `AUTH-003` guards the
+  /// route). The pipeline itself runs async (`AI-005`); a successful return
+  /// here just means the job was enqueued, not that the song is ready yet
+  /// (`UI-BUILDER-005`).
+  Future<GenerateSongResult> generateSong({
+    required String token,
+    required String text,
+    required String genre,
+    required String mood,
+    String? subject,
+  }) async {
+    final body = <String, dynamic>{'text': text, 'genre': genre, 'mood': mood};
+    if (subject != null && subject.isNotEmpty) body['subject'] = subject;
+
+    final decoded = await _postJson(
+      '/songs/generate',
+      body,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    return GenerateSongResult.fromJson(decoded);
+  }
+
   Future<AuthResult> _postAuth(String path, Map<String, dynamic> body) async {
+    final decoded = await _postJson(path, body);
+    return AuthResult.fromJson(decoded);
+  }
+
+  Future<Map<String, dynamic>> _postJson(
+    String path,
+    Map<String, dynamic> body, {
+    Map<String, String>? headers,
+  }) async {
     final http.Response response;
     try {
       response = await _client.post(
         Uri.parse('$_baseUrl$path'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', ...?headers},
         body: jsonEncode(body),
       );
     } catch (e) {
@@ -102,7 +148,7 @@ class ApiClient {
       throw ApiException(_extractMessage(decoded, response.statusCode), statusCode: response.statusCode);
     }
 
-    return AuthResult.fromJson(decoded);
+    return decoded;
   }
 
   Map<String, dynamic> _decodeBody(String body) {
