@@ -125,6 +125,68 @@ void main() {
       );
     });
   });
+
+  group('generateSong', () {
+    test('sends the bearer token and body, and parses a 202 response (API-006)', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async {
+          expect(request.url.toString(), 'http://test.local/api/songs/generate');
+          expect(request.headers['Authorization'], 'Bearer jwt.token.here');
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          expect(body, {
+            'text': 'E = mc^2',
+            'genre': 'Synthwave',
+            'mood': 'Calm Study Vibe',
+            'subject': 'Physics',
+          });
+
+          return http.Response(
+            jsonEncode({'promptId': 'prompt-1', 'jobId': 'job-1'}),
+            202,
+          );
+        }),
+      );
+
+      final result = await client.generateSong(
+        token: 'jwt.token.here',
+        text: 'E = mc^2',
+        genre: 'Synthwave',
+        mood: 'Calm Study Vibe',
+        subject: 'Physics',
+      );
+
+      expect(result.promptId, 'prompt-1');
+      expect(result.jobId, 'job-1');
+    });
+
+    test('omits subject from the body when not provided', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          expect(body.containsKey('subject'), isFalse);
+          return http.Response(jsonEncode({'promptId': 'prompt-1', 'jobId': 'job-1'}), 202);
+        }),
+      );
+
+      await client.generateSong(token: 'jwt.token.here', text: 'notes', genre: 'Lo-Fi', mood: 'Calm Study Vibe');
+    });
+
+    test('throws ApiException with the server message on a 401', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async {
+          return http.Response(jsonEncode({'statusCode': 401, 'message': 'Unauthorized'}), 401);
+        }),
+      );
+
+      await expectLater(
+        client.generateSong(token: 'bad-token', text: 'notes', genre: 'Lo-Fi', mood: 'Calm Study Vibe'),
+        throwsA(isA<ApiException>().having((e) => e.statusCode, 'statusCode', 401)),
+      );
+    });
+  });
 }
 
 /// Stand-in for `dart:io`'s `SocketException` — avoids importing `dart:io`
