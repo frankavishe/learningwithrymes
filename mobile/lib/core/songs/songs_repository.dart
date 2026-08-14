@@ -22,11 +22,31 @@ class SongsRepository {
     required String mood,
     String? subject,
   }) async {
+    final token = await _requireToken();
+    return _api.generateSong(token: token, text: text, genre: genre, mood: mood, subject: subject);
+  }
+
+  /// `API-001` — backs the temporary flat song list (`SongListScreen`) used
+  /// to reach Phase 10's karaoke player; Phase 11 will replace that screen
+  /// with the real subject-grouped library but can keep calling this.
+  Future<List<Song>> listSongs() async {
+    final token = await _requireToken();
+    return _api.getSongs(token: token);
+  }
+
+  /// `API-002` — the karaoke player screen's data source (`UI-PLAYER-001`..
+  /// `003`).
+  Future<Song> getSong(String id) async {
+    final token = await _requireToken();
+    return _api.getSong(token: token, id: id);
+  }
+
+  Future<String> _requireToken() async {
     final token = await _ref.read(authTokenProvider.future);
     if (token == null) {
-      throw StateError('Cannot generate a song while signed out.');
+      throw StateError('Cannot call the songs API while signed out.');
     }
-    return _api.generateSong(token: token, text: text, genre: genre, mood: mood, subject: subject);
+    return token;
   }
 }
 

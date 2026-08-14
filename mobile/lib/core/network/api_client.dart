@@ -55,6 +55,40 @@ class GenerateSongResult {
       );
 }
 
+/// Mirrors `backend/src/songs/entities/song.entity.ts` (`DB-003`) — a
+/// completed (or in-progress) generation. Used by both `GET /api/songs`
+/// (list) and `GET /api/songs/:id` (detail, `API-002`), which return the
+/// same shape.
+class Song {
+  const Song({
+    required this.id,
+    required this.title,
+    required this.generatedLyrics,
+    required this.audioFileUrl,
+    this.vocalStemUrl,
+    this.beatStemUrl,
+    this.durationSeconds,
+  });
+
+  final String id;
+  final String title;
+  final String generatedLyrics;
+  final String audioFileUrl;
+  final String? vocalStemUrl;
+  final String? beatStemUrl;
+  final int? durationSeconds;
+
+  factory Song.fromJson(Map<String, dynamic> json) => Song(
+        id: json['id'] as String,
+        title: json['title'] as String,
+        generatedLyrics: json['generatedLyrics'] as String,
+        audioFileUrl: json['audioFileUrl'] as String,
+        vocalStemUrl: json['vocalStemUrl'] as String?,
+        beatStemUrl: json['beatStemUrl'] as String?,
+        durationSeconds: json['durationSeconds'] as int?,
+      );
+}
+
 /// Thrown by [ApiClient] on a non-2xx response or an unreachable server.
 /// [message] is meant to be shown to the user directly — [AuthScreen] relies
 /// on this to satisfy `UI-AUTH-001`'s "invalid credentials show an inline
@@ -119,6 +153,43 @@ class ApiClient {
       headers: {'Authorization': 'Bearer $token'},
     );
     return GenerateSongResult.fromJson(decoded);
+  }
+
+  /// `API-001` — the caller's songs, newest first.
+  Future<List<Song>> getSongs({required String token}) {
+    return _getJson(
+      '/songs',
+      token: token,
+      decode: (decoded) => (decoded as List<dynamic>)
+          .map((e) => Song.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  /// `API-002` — the karaoke player screen's data source (`UI-PLAYER-001`..
+  /// `003`). A song owned by another user (or missing) comes back as a 404
+  /// `ApiException`, never leaked as a distinct 403 (`AUTH-003`).
+  Future<Song> getSong({required String token, required String id}) {
+    return _getJson('/songs/$id', token: token, decode: (decoded) => Song.fromJson(decoded as Map<String, dynamic>));
+  }
+
+  Future<T> _getJson<T>(
+    String path, {
+    required String token,
+    required T Function(dynamic decoded) decode,
+  }) async {
+    final http.Response response;
+    try {
+      response = await _client.get(Uri.parse('$_baseUrl$path'), headers: {'Authorization': 'Bearer $token'});
+    } catch (e) {
+      throw ApiException('Could not reach the server. Check your connection and try again.');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(_extractMessage(_decodeBody(response.body), response.statusCode), statusCode: response.statusCode);
+    }
+
+    return decode(response.body.isEmpty ? null : jsonDecode(response.body));
   }
 
   Future<AuthResult> _postAuth(String path, Map<String, dynamic> body) async {

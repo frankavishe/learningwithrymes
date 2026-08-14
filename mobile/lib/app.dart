@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_session_providers.dart';
 import 'features/auth/auth_screen.dart';
+import 'features/karaoke_player/song_list_screen.dart';
 import 'features/note_builder/note_builder_screen.dart';
 
 class RhythmNotesApp extends StatelessWidget {
@@ -40,15 +41,24 @@ class _AppRoot extends ConsumerWidget {
   }
 }
 
-/// Shell for signed-in users: owns the top-level `Scaffold`/`AppBar` and the
-/// sign-out control (exercising `AuthRepository.logout()`) so content screens
-/// — [NoteBuilderScreen] (Phase 9) now, Screens 3-4 from Phases 10-11 later —
-/// stay chrome-free and swappable in the body.
-class AuthenticatedShell extends ConsumerWidget {
+/// Shell for signed-in users: owns the top-level `Scaffold`/`AppBar`/bottom
+/// nav and the sign-out control (exercising `AuthRepository.logout()`) so
+/// content screens — [NoteBuilderScreen] (Phase 9), [SongListScreen] and
+/// `KaraokePlayerScreen` (Phase 10) — stay chrome-free and swappable. The
+/// bottom nav is a stand-in for real navigation until Phase 11's library
+/// screen likely replaces the "Songs" tab.
+class AuthenticatedShell extends ConsumerStatefulWidget {
   const AuthenticatedShell({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AuthenticatedShell> createState() => _AuthenticatedShellState();
+}
+
+class _AuthenticatedShellState extends ConsumerState<AuthenticatedShell> {
+  int _tabIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('RhythmNotes'),
@@ -60,7 +70,18 @@ class AuthenticatedShell extends ConsumerWidget {
           ),
         ],
       ),
-      body: const NoteBuilderScreen(),
+      body: IndexedStack(
+        index: _tabIndex,
+        children: const [NoteBuilderScreen(), SongListScreen()],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tabIndex,
+        onDestinationSelected: (index) => setState(() => _tabIndex = index),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.edit_note), label: 'Write'),
+          NavigationDestination(icon: Icon(Icons.library_music), label: 'Songs'),
+        ],
+      ),
     );
   }
 }

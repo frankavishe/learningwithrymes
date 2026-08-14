@@ -187,6 +187,106 @@ void main() {
       );
     });
   });
+
+  group('getSongs', () {
+    test('sends the bearer token and parses the list (API-001)', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.toString(), 'http://test.local/api/songs');
+          expect(request.headers['Authorization'], 'Bearer jwt.token.here');
+
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'song-1',
+                'title': 'Newton in Rhythm',
+                'generatedLyrics': '[Verse 1]\nline one',
+                'audioFileUrl': 'http://minio.local/songs/song-1.mp3',
+                'vocalStemUrl': null,
+                'beatStemUrl': null,
+                'durationSeconds': 60,
+              },
+            ]),
+            200,
+          );
+        }),
+      );
+
+      final songs = await client.getSongs(token: 'jwt.token.here');
+
+      expect(songs, hasLength(1));
+      expect(songs.single.id, 'song-1');
+      expect(songs.single.title, 'Newton in Rhythm');
+      expect(songs.single.vocalStemUrl, isNull);
+      expect(songs.single.durationSeconds, 60);
+    });
+
+    test('throws ApiException on a non-2xx response', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async {
+          return http.Response(jsonEncode({'message': 'Unauthorized'}), 401);
+        }),
+      );
+
+      await expectLater(
+        client.getSongs(token: 'bad-token'),
+        throwsA(isA<ApiException>().having((e) => e.statusCode, 'statusCode', 401)),
+      );
+    });
+  });
+
+  group('getSong', () {
+    test('sends the bearer token and parses the detail (API-002)', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.toString(), 'http://test.local/api/songs/song-1');
+          expect(request.headers['Authorization'], 'Bearer jwt.token.here');
+
+          return http.Response(
+            jsonEncode({
+              'id': 'song-1',
+              'title': 'Newton in Rhythm',
+              'generatedLyrics': '[Verse 1]\nline one',
+              'audioFileUrl': 'http://minio.local/songs/song-1.mp3',
+              'vocalStemUrl': 'http://minio.local/songs/song-1-vocals.mp3',
+              'beatStemUrl': null,
+              'durationSeconds': 60,
+            }),
+            200,
+          );
+        }),
+      );
+
+      final song = await client.getSong(token: 'jwt.token.here', id: 'song-1');
+
+      expect(song.id, 'song-1');
+      expect(song.vocalStemUrl, 'http://minio.local/songs/song-1-vocals.mp3');
+      expect(song.beatStemUrl, isNull);
+    });
+
+    test('throws a 404 ApiException for another user\'s song', () async {
+      final client = ApiClient(
+        baseUrl: 'http://test.local/api',
+        client: MockClient((request) async {
+          return http.Response(jsonEncode({'message': 'Song not found'}), 404);
+        }),
+      );
+
+      await expectLater(
+        client.getSong(token: 'jwt.token.here', id: 'not-mine'),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 404)
+              .having((e) => e.message, 'message', 'Song not found'),
+        ),
+      );
+    });
+  });
 }
 
 /// Stand-in for `dart:io`'s `SocketException` — avoids importing `dart:io`

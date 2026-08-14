@@ -95,4 +95,72 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+
+  group('listSongs', () {
+    test('sends the stored JWT and returns the parsed list (API-001)', () async {
+      store['jwt_token'] = 'stored-jwt';
+      String? capturedAuthHeader;
+      final container = buildContainer(
+        MockClient((request) async {
+          capturedAuthHeader = request.headers['Authorization'];
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'song-1',
+                'title': 'Newton in Rhythm',
+                'generatedLyrics': '[Verse 1]\nline one',
+                'audioFileUrl': 'http://minio.local/songs/song-1.mp3',
+                'durationSeconds': 60,
+              },
+            ]),
+            200,
+          );
+        }),
+      );
+
+      final songs = await container.read(songsRepositoryProvider).listSongs();
+
+      expect(capturedAuthHeader, 'Bearer stored-jwt');
+      expect(songs.single.id, 'song-1');
+    });
+
+    test('throws StateError when called while signed out', () async {
+      final container = buildContainer(MockClient((request) async => http.Response('', 500)));
+
+      await expectLater(container.read(songsRepositoryProvider).listSongs(), throwsA(isA<StateError>()));
+    });
+  });
+
+  group('getSong', () {
+    test('sends the stored JWT and returns the parsed song (API-002)', () async {
+      store['jwt_token'] = 'stored-jwt';
+      String? capturedAuthHeader;
+      final container = buildContainer(
+        MockClient((request) async {
+          capturedAuthHeader = request.headers['Authorization'];
+          return http.Response(
+            jsonEncode({
+              'id': 'song-1',
+              'title': 'Newton in Rhythm',
+              'generatedLyrics': '[Verse 1]\nline one',
+              'audioFileUrl': 'http://minio.local/songs/song-1.mp3',
+              'durationSeconds': 60,
+            }),
+            200,
+          );
+        }),
+      );
+
+      final song = await container.read(songsRepositoryProvider).getSong('song-1');
+
+      expect(capturedAuthHeader, 'Bearer stored-jwt');
+      expect(song.id, 'song-1');
+    });
+
+    test('throws StateError when called while signed out', () async {
+      final container = buildContainer(MockClient((request) async => http.Response('', 500)));
+
+      await expectLater(container.read(songsRepositoryProvider).getSong('song-1'), throwsA(isA<StateError>()));
+    });
+  });
 }
